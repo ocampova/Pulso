@@ -160,14 +160,40 @@ export const ROUTE = [
 
 export const routeWeek = (n) => ROUTE.find((w) => w.n === n) || ROUTE[0];
 
-// Hábitos activos del checklist según la semana de la ruta.
-export function activeHabits(week) {
+// ---------- Ritmo ----------
+// 'intensivo' (predeterminado): 3 fases de 14 días que activan varias etapas a la vez.
+// 'gradual': una etapa por semana.
+export const PACES = {
+  intensivo: { label: 'Intensivo', detail: '3 fases de 2 semanas. Varios cambios a la vez desde el día 1.' },
+  gradual: { label: 'Gradual', detail: 'Un cambio por semana durante 12 semanas.' },
+};
+export const PHASES = [
+  { n: 1, title: 'Arranque', weeks: [1, 2, 3, 4, 5], extra: ['proteina_desayuno'], days: 14,
+    why: 'Los cambios con más efecto, todos juntos: el plato, lo que tomás, caminar después de comer, menos sal y proteína en el desayuno. Con alimentación tipo DASH y menos sal, la presión suele bajar de forma medible en unas 2 semanas.',
+    target: 'En 14 días: presión promedio más baja que en tu primera semana, hábitos cumplidos 8 de cada 10 días y un ritmo de peso de 0,5–1 kg por semana.' },
+  { n: 2, title: 'Movimiento', weeks: [6, 7, 8], days: 14,
+    why: 'Sumá 150 minutos de actividad por semana, fuerza 2 días y fibra en cada comida. El músculo que trabaja usa glucosa: es la palanca más directa sobre la resistencia a la insulina.',
+    target: 'En 14 días: 150 minutos por semana, 2 días de fuerza por semana y la presión y el peso siguiendo la tendencia.' },
+  { n: 3, title: 'Consolidar', weeks: [9, 10, 11, 12], days: 14,
+    why: 'Sueño, estrés y comer fuera: lo que sostiene los avances. Cerrás con una revisión completa para llevar a tu médico y definir el siguiente hito.',
+    target: 'En 14 días: dormir 7 horas o más, mantener los hábitos fuera de casa y repetir la semana de medición para comparar con el inicio.' },
+];
+export const paceOf = (profile) => (profile?.pace === 'gradual' ? 'gradual' : 'intensivo');
+export const phaseOf = (week) => PHASES.find((p) => week <= p.weeks[p.weeks.length - 1]) || PHASES[PHASES.length - 1];
+export const phaseEnd = (phase) => phase.weeks[phase.weeks.length - 1];
+// Etapa efectiva: en intensivo, todas las etapas de la fase actual están activas.
+export const effectiveWeek = (week, pace) => (pace === 'intensivo' ? phaseEnd(phaseOf(week)) : week);
+
+// Hábitos activos del checklist según la etapa y el ritmo.
+export function activeHabits(week, pace = 'gradual') {
+  const ew = effectiveWeek(week, pace);
   const ids = [];
   for (const w of ROUTE) {
-    if (w.n > week) break;
+    if (w.n > ew) break;
     if (w.habit) ids.push(w.habit);
     if (w.extraHabit) ids.push(w.extraHabit);
   }
+  if (pace === 'intensivo') for (const p of PHASES) if (p.n <= phaseOf(week).n) (p.extra || []).forEach((x) => ids.includes(x) || ids.push(x));
   return DAILY_HABITS.filter((h) => ids.includes(h.id));
 }
 
@@ -249,13 +275,17 @@ function latestLab(ms, test) {
 export function coachAdvice({ profile, plan, measurements }, now = new Date()) {
   const goals = profile.goals?.length ? profile.goals : ['peso', 'insulina', 'presion'];
   const ms = measurements || [];
-  const week = plan?.coach?.week || 1;
+  const pace = paceOf(profile);
+  const week = effectiveWeek(plan?.coach?.week || 1, pace);
+  const phase = pace === 'intensivo' ? phaseOf(week) : null;
+  const firstStage = phase ? phase.n === 1 : week === 1;
+  const lastStage = phase ? phase.n === PHASES.length : week === 12;
   const actions = [];
   const insights = [];
 
   // 1. Presión: semana de medición
   const bpw = bpWeekProgress(ms, now);
-  const bpNeeded = goals.includes('presion') || week === 1 || week === 12;
+  const bpNeeded = goals.includes('presion') || firstStage || lastStage;
   if (bpNeeded && !bpw.done) {
     const h = now.getHours();
     actions.push({
@@ -267,7 +297,7 @@ export function coachAdvice({ profile, plan, measurements }, now = new Date()) {
 
   // 2. Peso
   const w = of(ms, 'weight');
-  if (goals.includes('peso') || week === 1) {
+  if (goals.includes('peso') || firstStage) {
     if (!w.length) actions.push({ id: 'weight-first', title: 'Registrá tu peso de inicio', detail: 'En ayunas, después de ir al baño, con poca ropa.', href: '#/registrar/weight', cta: 'Registrar peso', tone: 'info' });
     else if (daysSince(w[0].measured_at, now) >= 7) actions.push({ id: 'weight-weekly', title: 'Toca pesarte', detail: `Tu último registro fue hace ${daysSince(w[0].measured_at, now)} días. Una vez por semana, el mismo día y a la misma hora, es suficiente.`, href: '#/registrar/weight', cta: 'Registrar peso', tone: 'info' });
   }
@@ -311,7 +341,7 @@ export function coachAdvice({ profile, plan, measurements }, now = new Date()) {
     if (trend.perWeek <= -1.2) insights.push({ id: 'weight-fast', title: `Estás bajando ${Math.abs(trend.perWeek).toString().replace('.', ',')} kg por semana`, detail: 'Es más rápido que el ritmo que suelen recomendar (0,5–1 kg por semana). Asegurate de comer suficiente proteína y verduras; si no estás haciendo un plan supervisado, comentalo con tu médico.', tone: 'warn' });
     else if (trend.perWeek < -0.2) insights.push({ id: 'weight-down', title: `Tendencia: −${Math.abs(trend.perWeek).toString().replace('.', ',')} kg por semana`, detail: `Calculada con ${trend.n} registros en ${trend.weeks.toString().replace('.', ',')} semanas. Un ritmo sostenible.`, tone: 'ok' });
     else if (trend.perWeek <= 0.2) {
-      const adh = habitAdherence(ms, activeHabits(week), now, 14);
+      const adh = habitAdherence(ms, activeHabits(week, pace), now, 14);
       insights.push({ id: 'weight-flat', title: 'Tu peso se mantiene estable', detail: adh.total != null && adh.total >= 70 ? 'Venís cumpliendo tus hábitos. Probá reducir un poco la porción de almidón (arroz, tortilla) en la cena y sumar minutos de actividad. Los cambios en cintura y presión también cuentan.' : 'Antes de ajustar porciones, enfocate en cumplir los hábitos de tu semana actual; ahí suele estar la diferencia.', tone: 'info' });
     } else insights.push({ id: 'weight-up', title: 'Tu peso subió un poco en las últimas semanas', detail: 'Pasa. Revisá bebidas, comidas fuera de casa y porciones de almidón. Volvé al plato de la semana 2 sin castigarte.', tone: 'info' });
   }
@@ -322,19 +352,27 @@ export function coachAdvice({ profile, plan, measurements }, now = new Date()) {
     insights.push({ id: 'a1c-change', title: `HbA1c: ${String(a1cs[a1cs.length - 1].data.value).replace('.', ',')}% → ${String(a1cs[0].data.value).replace('.', ',')}%`, detail: diff < 0 ? `Bajó ${String(Math.abs(diff)).replace('.', ',')} puntos. Tu médico puede decirte qué significa para tu caso.` : 'Revisá este resultado con tu médico.', tone: diff < 0 ? 'ok' : 'info' });
   }
 
+  // Seguridad en el ritmo intensivo: con medicamentos, avisar al médico.
+  if (phase && phase.n === 1 && (profile.medications || '').trim()) {
+    insights.unshift({ id: 'meds-intensive', title: 'Avisale a tu médico que empezaste cambios fuertes', detail: 'Con medicamentos para la presión o la glucosa, varios cambios a la vez pueden bajar esos valores más rápido de lo esperado. Si notás mareo, debilidad, temblor o sudor frío, medí y consultá: puede hacer falta ajustar la dosis. No la cambies por tu cuenta.', tone: 'warn' });
+  }
+
   // Avance de ruta
   const since = plan?.coach?.since;
   const daysInWeek = since ? daysSince(since, now) : 0;
-  const canAdvance = week < ROUTE.length && daysInWeek >= 6;
+  const stageDays = phase ? phase.days : 7;
+  const canAdvance = (phase ? phase.n < PHASES.length : week < ROUTE.length) && daysInWeek >= stageDays - 1;
 
-  return { week, goals, actions: actions.slice(0, 3), insights, bpWeek: bpw, activity: act, daysInWeek, canAdvance };
+  return { week, pace, phase, stageDays, goals, actions: actions.slice(0, 3), insights, bpWeek: bpw, activity: act, daysInWeek, canAdvance };
 }
 
 // Resumen semanal: compara los últimos 7 días con los 7 anteriores.
 export function weeklyReview({ profile, plan, measurements }, now = new Date()) {
   const ms = measurements || [];
-  const week = plan?.coach?.week || 1;
-  const habits = activeHabits(week);
+  const pace = paceOf(profile);
+  const week = effectiveWeek(plan?.coach?.week || 1, pace);
+  const phase = pace === 'intensivo' ? phaseOf(week) : null;
+  const habits = activeHabits(week, pace);
   const cur = habitAdherence(ms, habits, now, 7);
   const prevNow = new Date(now.getTime() - 7 * DAY);
   const prev = habitAdherence(ms, habits, prevNow, 7);
@@ -348,7 +386,7 @@ export function weeklyReview({ profile, plan, measurements }, now = new Date()) 
   if (bpNow && bpPrev && bpNow.sys < bpPrev.sys) wins.push(`Tu presión promedio bajó de ${bpPrev.sys}/${bpPrev.dia} a ${bpNow.sys}/${bpNow.dia}.`);
   if (wNow && wPrev && wNow.data.kg < wPrev.data.kg) wins.push(`Tu peso pasó de ${String(wPrev.data.kg).replace('.', ',')} a ${String(wNow.data.kg).replace('.', ',')} kg.`);
   const hardest = habits.map((h) => ({ h, pct: cur.byHabit[h.id].pct })).sort((a, b) => a.pct - b.pct)[0];
-  return { week, habits, cur, prev, bpNow, bpPrev, wNow, wPrev, act, actPrev, wins, hardest: hardest && cur.daysLogged >= 3 && hardest.pct < 60 ? hardest.h : null };
+  return { week, pace, phase, habits, cur, prev, bpNow, bpPrev, wNow, wPrev, act, actPrev, wins, hardest: hardest && cur.daysLogged >= 3 && hardest.pct < 60 ? hardest.h : null };
 }
 
 export function weekRangeLabel(since) {

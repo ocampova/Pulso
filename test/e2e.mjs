@@ -73,8 +73,11 @@ try {
   await shot('05-hoy');
   const todayText = await page.textContent('main');
   assert.match(todayText, /Buen(os|as) .*Allan/);
-  assert.match(todayText, /Semana 1 de 12/);
-  assert.match(todayText, /Tu punto de partida/);
+  assert.match(todayText, /Fase 1 de 3/); // kicker de la tarjeta de foco
+  assert.match(todayText, /Arranque/);
+  assert.match(todayText, /En 14 días/);
+  assert.equal(await page.locator('[data-habit]').count(), 5, 'ritmo intensivo: 5 hábitos desde el día 1');
+  assert.match(todayText, /Mediciones de inicio/);
   assert.match(todayText, /Registrar presión/);
   assert.match(todayText, /Semana de medición: 0 de 7/);
   assert.match(todayText, /Registrá tu peso de inicio/);
@@ -155,19 +158,23 @@ try {
   await page.waitForSelector('.chart svg');
   await shot('10-progreso');
 
-  step('ruta: saltar a la semana 3 y usar el checklist');
+  step('ruta: 3 fases; pasar a la fase 2 y usar el checklist');
   await page.click('nav >> text=Ruta');
   await page.waitForSelector('ol.route');
+  assert.equal(await page.locator('main h2:has-text("Fase ")').count(), 3);
   await shot('10b-ruta');
   await page.click('ol.route >> text=Lo que tomás');
-  await page.waitForSelector('[data-go-week="3"]');
+  await page.waitForSelector('.bullets');
+  assert.equal(await page.locator('[data-go-week]').count(), 0, 'la etapa ya está activa en la fase 1');
   await shot('10c-ruta-semana');
-  await page.click('[data-go-week="3"]');
-  await page.waitForSelector('[data-go-week="3"]:has-text("tocá de nuevo")');
-  await page.click('[data-go-week="3"]');
+  await page.goto(BASE + '/#/ruta');
+  await page.waitForSelector('[data-go-week="8"]');
+  await page.click('[data-go-week="8"]');
   await page.waitForSelector('#h-check');
-  assert.match(await page.textContent('#h-focus'), /Lo que tomás/);
-  assert.equal(await page.locator('[data-habit]').count(), 2);
+  await page.waitForFunction(() => /Fase 2 de 3/.test(document.querySelector('section.focus')?.textContent || ''));
+  assert.match(await page.textContent('#h-focus'), /Movimiento/);
+  assert.equal(await page.locator('[data-habit]').count(), 6);
+  assert.equal(await page.locator('[data-habit] .badge:has-text("Nuevo")').count(), 1, 'solo la fibra es nueva en la fase 2');
   await page.click('[data-habit=verduras]');
   await page.waitForFunction(() => document.querySelector('[data-habit=verduras]')?.getAttribute('aria-pressed') === 'true');
   await page.waitForTimeout(600);
@@ -191,7 +198,8 @@ try {
 
   step('revisión semanal');
   await page.goto(BASE + '/#/revision');
-  await page.waitForSelector('text=Revisión semanal');
+  await page.waitForSelector('text=Revisión de la fase');
+  await page.waitForSelector('text=Meta de la fase.');
   await page.waitForSelector('text=Números de la semana');
   assert.match(await page.textContent('main'), /Medio plato de verduras en almuerzo y cena\s*1\/7/, 'la revisión cuenta el hábito marcado hoy');
   await shot('10e-revision');

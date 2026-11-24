@@ -7,7 +7,7 @@ import {
   validateMeasurement, validateProfile, LAB_TESTS, CONTEXT_LABELS, LAB_SOURCES, HABITS,
   stats, milestone, bmi, defaultMealTimes, ACTIVITY_KINDS, INTENSITIES,
 } from './logic.js';
-import { GOALS, ROUTE, routeWeek, activeHabits, coachAdvice, weeklyReview, bpWeekProgress, activityWeek, habitAdherence, weightTrend, COACH_SOURCES } from './coach.js';
+import { GOALS, ROUTE, PHASES, PACES, phaseOf, phaseEnd, paceOf, effectiveWeek, routeWeek, activeHabits, coachAdvice, weeklyReview, bpWeekProgress, activityWeek, habitAdherence, weightTrend, COACH_SOURCES } from './coach.js';
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -316,6 +316,9 @@ function viewOnboarding() {
       <fieldset class="fieldset" style="margin-top:18px"><legend>Elegí uno o más objetivos</legend>
         <div class="checks">${GOALS.map((g) => `<label class="check"><input type="checkbox" name="goals" value="${g.id}" ${(d.goals || []).includes(g.id) ? 'checked' : ''}>${esc(g.label)}</label>`).join('')}</div>
         ${e.goals ? `<span class="error-msg">${icon('triangle-alert', 'sm')}${esc(e.goals)}</span>` : ''}
+        </fieldset>
+      <fieldset class="fieldset" style="margin-top:22px"><legend>¿A qué ritmo querés avanzar?</legend>
+        <div class="checks">${Object.entries(PACES).map(([k, v]) => `<label class="check"><input type="radio" name="pace" value="${k}" ${(d.pace || 'intensivo') === k ? 'checked' : ''}><span><strong>${esc(v.label)}</strong><br><span class="small muted">${esc(v.detail)}</span></span></label>`).join('')}</div>
         <span class="hint" style="margin-top:10px">La resistencia a la insulina y la presión alta se diagnostican y tratan con tu médico. Pulso te acompaña con hábitos y registros; no reemplaza ese seguimiento ni cambia medicamentos.</span>
       </fieldset>`;
   } else if (o.step === 1) {
@@ -387,6 +390,7 @@ function readOnboardingForm(f, o) {
   const v = (n) => f.elements[n]?.value;
   if (o.step === 0) {
     d.goals = $$('input[name=goals]:checked', f).map((x) => x.value);
+    d.pace = f.querySelector('input[name=pace]:checked')?.value || 'intensivo';
   } else if (o.step === 1) {
     d.name = v('name') || '';
     d.age = v('age') || null; d.initialWeight = v('initialWeight') || null; d.height = v('height') || null;
@@ -420,7 +424,7 @@ function bindOnboarding() {
     e.preventDefault();
     readOnboardingForm(f, o);
     const v = validateProfile(o.data);
-    const stepFields = [['goals'], ['name', 'age', 'initialWeight', 'height', 'activity', 'conditions', 'medications'], ['allergies', 'preferences', 'otherAllergies'], MEALS.map((m) => `time_${m.id}`), ['milestonePct']][o.step];
+    const stepFields = [['goals', 'pace'], ['name', 'age', 'initialWeight', 'height', 'activity', 'conditions', 'medications'], ['allergies', 'preferences', 'otherAllergies'], MEALS.map((m) => `time_${m.id}`), ['milestonePct']][o.step];
     const errs = Object.fromEntries(Object.entries(v.errors).filter(([k]) => stepFields.includes(k)));
     if (o.step === 0 && !o.data.goals.length) errs.goals = 'Elegí al menos un objetivo.';
     if (o.step === 1 && !o.data.initialWeight) errs.initialWeight = 'Ingresá tu peso actual: es la base de tu primer hito.';
@@ -537,16 +541,22 @@ function trailPath(upTo) {
   }
   return d;
 }
+const curPace = () => paceOf(S.profile?.data);
+const curWeek = () => effectiveWeek(S.plan?.data?.coach?.week || 1, curPace());
+
 function routeTrail(week, { dark = false, animate = false } = {}) {
-  return `<div class="trail ${dark ? 'on-dark' : ''} ${animate ? 'animate' : ''}" role="list" aria-label="Ruta de 12 semanas: vas en la semana ${week}">
+  const intense = curPace() === 'intensivo';
+  const ph = intense ? phaseOf(week) : null;
+  const first = ph ? ph.weeks[0] : week;
+  return `<div class="trail ${dark ? 'on-dark' : ''} ${animate ? 'animate' : ''}" role="list" aria-label="${ph ? `Ruta de 12 etapas: estás en la fase ${ph.n} de ${PHASES.length}` : `Ruta de 12 semanas: vas en la semana ${week}`}">
     <svg class="trail-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
       <path class="todo" d="${trailPath(12)}" vector-effect="non-scaling-stroke"/>
       ${week > 1 ? `<path class="done" pathLength="1" d="${trailPath(week)}" vector-effect="non-scaling-stroke"${animate ? ` style="--trail-from:${(1 / (week - 1)).toFixed(3)}"` : ''}/>` : ''}
     </svg>
     ${ROUTE.map((w) => {
       const p = trailPos(w.n);
-      const state = w.n < week ? 'done' : w.n === week ? 'now' : 'upcoming';
-      return `<a role="listitem" class="stop ${state}" href="#/ruta/${w.n}" style="left:${p.x}%;top:${p.y}%" aria-label="Semana ${w.n}: ${esc(w.title)}${state === 'done' ? ', completada' : state === 'now' ? ', semana actual' : ''}"${state === 'now' ? ' aria-current="step"' : ''}>${icon(w.icon, 'sm')}<span class="stop-n" aria-hidden="true">${w.n}</span></a>`;
+      const state = w.n < first ? 'done' : w.n <= week ? (ph ? 'active' : 'now') : 'upcoming';
+      return `<a role="listitem" class="stop ${state}" href="#/ruta/${w.n}" style="left:${p.x}%;top:${p.y}%" aria-label="Etapa ${w.n}: ${esc(w.title)}${state === 'done' ? ', completada' : state === 'upcoming' ? '' : ', activa ahora'}"${w.n === first && state !== 'done' ? ' aria-current="step"' : ''}>${icon(w.icon, 'sm')}<span class="stop-n" aria-hidden="true">${w.n}</span></a>`;
     }).join('')}
   </div>`;
 }
@@ -564,11 +574,15 @@ function baselineChecklist(c) {
 }
 
 function habitChecklist(week) {
-  const habits = activeHabits(week);
+  const pace = curPace();
+  const habits = activeHabits(week, pace);
+  const ph = pace === 'intensivo' ? phaseOf(week) : null;
+  const prevIds = ph && ph.n > 1 ? activeHabits(phaseEnd(PHASES[ph.n - 2]), pace).map((h) => h.id) : null;
+  const isNew = (h) => (ph ? (prevIds ? !prevIds.includes(h.id) : false) : h.id === routeWeek(week).habit || h.id === routeWeek(week).extraHabit);
   const rec = todayHabitRecord();
   return `<ul class="list todo">${habits.map((h) => {
     const on = !!rec?.data.items?.[h.id];
-    return `<li><button class="list-item" type="button" data-habit="${h.id}" aria-pressed="${on}"><span class="tick ${on ? 'on' : ''}">${on ? icon('check', 'sm') : ''}</span><span class="grow">${esc(h.label)}</span>${h.id === routeWeek(week).habit || h.id === routeWeek(week).extraHabit ? '<span class="badge">Nuevo</span>' : ''}</button></li>`;
+    return `<li><button class="list-item" type="button" data-habit="${h.id}" aria-pressed="${on}"><span class="tick ${on ? 'on' : ''}">${on ? icon('check', 'sm') : ''}</span><span class="grow">${esc(h.label)}</span>${isNew(h) ? '<span class="badge">Nuevo</span>' : ''}</button></li>`;
   }).join('')}</ul>`;
 }
 
@@ -579,34 +593,39 @@ function viewToday() {
   const ms = measurementsState();
   const idx = Math.min(6, Math.max(0, dayIndexToday()));
   const plan = S.plan.data;
-  const week = plan.coach?.week || 1;
+  const week = curWeek();
   const rw = routeWeek(week);
   let coachBlock = ms.block || '';
   if (ms.list) {
     const c = coachState();
-    const habits = activeHabits(week);
+    const ph = c.phase;
+    const firstStage = ph ? ph.n === 1 : week === 1;
+    const habits = activeHabits(week, c.pace);
     const windowDays = Math.min(7, c.daysInWeek + 1);
     const adh = habitAdherence(S.measurements, habits, new Date(), windowDays);
     const todayDone = habits.filter((h) => todayHabitRecord()?.data.items?.[h.id]).length;
     const h = new Date().getHours();
-    const showBp = c.goals.includes('presion') || week === 1 || week === 12;
+    const showBp = c.goals.includes('presion') || firstStage || (ph ? ph.n === PHASES.length : week === 12);
+    const baselineDone = (S.measurements || []).some((m) => m.type === 'weight') && c.bpWeek.done;
     const bpSlot = h < 12 ? 'de la mañana' : h >= 17 ? 'de la noche' : '';
     const nextActions = c.actions.filter((a) => !(showBp && a.id === 'bp-week'));
     coachBlock = `
     ${latestAlertBanner()}
     <section class="focus" aria-labelledby="h-focus">
-      <div class="row spread"><span class="focus-kicker">Semana ${week} de ${ROUTE.length}</span><a class="focus-link" href="#/ruta/${week}">Ver guía ${icon('chevron-right', 'sm')}</a></div>
-      <h2 id="h-focus">${esc(rw.title)}</h2>
-      <p>${esc(rw.why)}</p>
+      <div class="row spread"><span class="focus-kicker">${ph ? `Fase ${ph.n} de ${PHASES.length} · día ${Math.min(ph.days, c.daysInWeek + 1)} de ${ph.days}` : `Semana ${week} de ${ROUTE.length}`}</span><a class="focus-link" href="#/ruta${ph ? '' : `/${week}`}">Ver ${ph ? 'fase' : 'guía'} ${icon('chevron-right', 'sm')}</a></div>
+      <h2 id="h-focus">${esc(ph ? ph.title : rw.title)}</h2>
+      <p>${esc(ph ? ph.why : rw.why)}</p>
       ${routeTrail(week, { dark: true, animate: S.ui.justAdvanced === week })}
-      ${c.canAdvance ? `<div class="actions" style="margin-top:14px"><a class="btn sm light" href="#/revision">${icon('flag', 'sm')}Revisar la semana y avanzar</a></div>` : `<p class="focus-meta">Día ${windowDays} de esta etapa${habits.length && adh.daysLogged >= 3 ? `. Cumpliste tus hábitos el ${adh.total}% de estos días.` : ''}</p>`}
+      ${ph ? `<p class="focus-target">${icon('target', 'sm')}<span>${esc(ph.target)}</span></p>` : ''}
+      ${c.canAdvance ? `<div class="actions" style="margin-top:14px"><a class="btn sm light" href="#/revision">${icon('flag', 'sm')}Revisar ${ph ? 'la fase' : 'la semana'} y avanzar</a></div>` : `<p class="focus-meta">${ph ? '' : `Día ${windowDays} de esta etapa. `}${habits.length && adh.daysLogged >= 3 ? `Cumpliste tus hábitos el ${adh.total}% de estos días.` : ''}</p>`}
     </section>
     ${showBp ? `<a class="bp-cta" href="#/registrar/bp">${icon('heart-pulse')}<span class="grow"><strong>Registrar presión${bpSlot ? ` ${bpSlot}` : ''}</strong><span class="sub">${c.bpWeek.done ? 'Tu semana de medición está completa.' : `Semana de medición: ${c.bpWeek.completeDays} de 7 días con mañana y noche.`}</span></span>${icon('chevron-right', 'chev')}</a>` : ''}
 
     <section class="section" aria-labelledby="h-check">
-      <div class="section-head"><h2 id="h-check">${week === 1 ? 'Tu punto de partida' : 'Tu checklist de hoy'}</h2>${week > 1 ? `<span class="muted small" id="today-count">${todayDone} de ${habits.length}</span>` : ''}</div>
-      ${week === 1 ? baselineChecklist(c) : habitChecklist(week)}
+      <div class="section-head"><h2 id="h-check">${habits.length ? 'Tu checklist de hoy' : 'Tu punto de partida'}</h2>${habits.length ? `<span class="muted small" id="today-count">${todayDone} de ${habits.length}</span>` : ''}</div>
+      ${habits.length ? habitChecklist(week) : baselineChecklist(c)}
     </section>
+    ${habits.length && firstStage && !baselineDone ? `<section class="section" aria-labelledby="h-base"><h2 id="h-base">Mediciones de inicio</h2>${baselineChecklist(c)}<p class="small muted" style="margin-top:8px">Sirven de punto de comparación para el control de los 14 días.</p></section>` : ''}
 
     ${nextActions.length ? `<section class="section" aria-labelledby="h-next"><h2 id="h-next">Tu próximo paso</h2>
       <div class="stack">${nextActions.slice(0, 1).map((a) => `<div class="card next">${icon(a.id.startsWith('bp') ? 'heart-pulse' : a.id.startsWith('weight') ? 'scale' : a.id.startsWith('labs') ? 'droplet' : a.id === 'strength' ? 'dumbbell' : 'footprints')}
@@ -665,7 +684,10 @@ function viewToday() {
 // RUTA
 // ---------------------------------------------------------------------------
 function viewRoute([nRaw]) {
-  const cur = S.plan.data.coach?.week || 1;
+  const cur = curWeek();
+  const pace = curPace();
+  const intense = pace === 'intensivo';
+  const curPh = intense ? phaseOf(cur) : null;
   if (nRaw) {
     const n = Number(nRaw);
     const w = ROUTE.find((x) => x.n === n);
@@ -673,30 +695,38 @@ function viewRoute([nRaw]) {
     const habits = [w.habit, w.extraHabit].filter(Boolean).map((id) => activeHabits(12).find((h) => h.id === id));
     const html = `
       <a class="back" href="#/ruta">${icon('chevron-left')}Ruta</a>
-      <div class="focus"><span class="focus-kicker">Semana ${w.n} de ${ROUTE.length}${w.n === cur ? ' · tu semana actual' : ''}</span><h1 style="color:#fff;margin-top:6px">${esc(w.title)}</h1><p>${esc(w.why)}</p></div>
+      <div class="focus"><span class="focus-kicker">${intense ? `Fase ${phaseOf(w.n).n} · etapa ${w.n} de ${ROUTE.length}${phaseOf(w.n).n === curPh.n ? ' · activa ahora' : ''}` : `Semana ${w.n} de ${ROUTE.length}${w.n === cur ? ' · tu semana actual' : ''}`}</span><h1 style="color:#fff;margin-top:6px">${esc(w.title)}</h1><p>${esc(w.why)}</p></div>
       <section class="section"><h2>Cómo hacerlo</h2><div class="card"><ul class="bullets">${w.how.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div></section>
       ${habits.length ? `<section class="section"><h2>Hábito que se suma a tu checklist</h2><ul class="list">${habits.map((h) => `<li class="list-item">${icon('circle-check')}<span class="grow">${esc(h.label)}</span></li>`).join('')}</ul></section>` : ''}
       <section class="section"><p class="small muted">Para: ${w.goals.map((g) => GOALS.find((x) => x.id === g).short).join(', ')}. Fuente: ${extLink(w.source)}</p></section>
-      ${w.n !== cur ? `<div class="thumb-bar no-print"><button class="btn ${w.n > cur ? '' : 'secondary'}" type="button" data-go-week="${w.n}">${w.n > cur ? `Empezar la semana ${w.n}` : `Volver a la semana ${w.n}`}</button></div>` : ''}`;
+      ${intense
+        ? (phaseOf(w.n).n !== curPh.n ? `<div class="thumb-bar no-print"><button class="btn ${phaseOf(w.n).n > curPh.n ? '' : 'secondary'}" type="button" data-go-week="${phaseEnd(phaseOf(w.n))}">${phaseOf(w.n).n > curPh.n ? `Empezar la fase ${phaseOf(w.n).n}` : `Volver a la fase ${phaseOf(w.n).n}`}</button></div>` : '')
+        : (w.n !== cur ? `<div class="thumb-bar no-print"><button class="btn ${w.n > cur ? '' : 'secondary'}" type="button" data-go-week="${w.n}">${w.n > cur ? `Empezar la semana ${w.n}` : `Volver a la semana ${w.n}`}</button></div>` : '')}`;
     return { title: w.title, html, bind: bindRouteJump };
   }
   const html = `
-    <div class="page-head"><h1>Tu ruta</h1><p class="muted">12 etapas, un cambio a la vez. Avanzás cuando te sentís listo; no hay fechas límite.</p></div>
-    <div class="card">${routeTrail(cur)}<p class="small muted" style="margin-top:6px">Semana ${cur}: <strong style="color:var(--ink)">${esc(routeWeek(cur).title)}</strong>. Tocá una parada para ver su guía.</p></div>
-    <ol class="route">${ROUTE.map((w) => `<li class="${w.n < cur ? 'done' : w.n === cur ? 'now' : ''}"><a href="#/ruta/${w.n}">
+    <div class="page-head"><h1>Tu ruta</h1><p class="muted">${intense ? '12 etapas en 3 fases de 2 semanas. Ritmo intensivo: varios cambios a la vez.' : '12 etapas, un cambio a la vez. Avanzás cuando te sentís listo; no hay fechas límite.'} Podés cambiar el ritmo en <a href="#/perfil">Perfil</a>.</p></div>
+    <div class="card">${routeTrail(cur)}<p class="small muted" style="margin-top:6px">${intense ? `Fase ${curPh.n}: <strong style="color:var(--ink)">${esc(curPh.title)}</strong>.` : `Semana ${cur}: <strong style="color:var(--ink)">${esc(routeWeek(cur).title)}</strong>.`} Tocá una parada para ver su guía.</p></div>
+    ${intense ? PHASES.map((ph) => `<section class="section"><div class="section-head"><h2>Fase ${ph.n}: ${esc(ph.title)}</h2><span class="muted small">${ph.n < curPh.n ? 'Completada' : ph.n === curPh.n ? 'Activa' : '14 días'}</span></div>
+      <p class="small muted" style="margin:-4px 0 10px">${esc(ph.target)}</p>
+      <ol class="route" style="margin-top:0">${ROUTE.filter((w) => ph.weeks.includes(w.n)).map((w) => `<li class="${ph.n < curPh.n ? 'done' : ph.n === curPh.n ? 'now' : ''}"><a href="#/ruta/${w.n}"><span class="route-n">${ph.n < curPh.n ? icon('check', 'sm') : w.n}</span><span class="grow"><span class="title">${esc(w.title)}</span></span>${icon('chevron-right', 'chev')}</a></li>`).join('')}</ol>
+      ${ph.n > curPh.n ? `<div class="actions" style="margin-top:10px"><button class="btn secondary" type="button" data-go-week="${phaseEnd(ph)}">Empezar la fase ${ph.n}</button></div>` : ''}</section>`).join('') : `<ol class="route">${ROUTE.map((w) => `<li class="${w.n < cur ? 'done' : w.n === cur ? 'now' : ''}"><a href="#/ruta/${w.n}">
       <span class="route-n">${w.n < cur ? icon('check', 'sm') : w.n}</span>
-      <span class="grow"><span class="title">${esc(w.title)}</span><br><span class="sub">${w.n === cur ? 'Semana actual' : w.n < cur ? 'Completada' : w.goals.map((g) => GOALS.find((x) => x.id === g).short).join(' · ')}</span></span>${icon('chevron-right', 'chev')}</a></li>`).join('')}</ol>
-    <div class="actions" style="margin-top:18px"><a class="btn secondary" href="#/revision">${icon('flag')}Revisión semanal</a></div>`;
+      <span class="grow"><span class="title">${esc(w.title)}</span><br><span class="sub">${w.n === cur ? 'Semana actual' : w.n < cur ? 'Completada' : w.goals.map((g) => GOALS.find((x) => x.id === g).short).join(' · ')}</span></span>${icon('chevron-right', 'chev')}</a></li>`).join('')}</ol>`}
+    <div class="actions" style="margin-top:18px"><a class="btn secondary" href="#/revision">${icon('flag')}${intense ? 'Revisión de la fase' : 'Revisión semanal'}</a></div>`;
   return { title: 'Ruta', html, bind: bindRouteJump };
 }
 function bindRouteJump() {
   $$('[data-go-week]').forEach((b) => b.onclick = () => {
     const week = Number(b.dataset.goWeek);
-    const cur = S.plan.data.coach?.week || 1;
-    if (week > cur + 1 && b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = `Saltar ${week - cur} semanas: tocá de nuevo`; return; }
+    const cur = curWeek();
+    const intense = curPace() === 'intensivo';
+    const jump = intense ? phaseOf(week).n - phaseOf(cur).n : week - cur;
+    if (jump > 1 && b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = `Saltar ${jump} ${intense ? 'fases' : 'semanas'}: tocá de nuevo`; return; }
     S.plan.data.coach = { week, since: todayIso() };
-    S.ui.justAdvanced = week === cur + 1 ? week : null;
-    planOps([{ type: 'setCoachWeek', week, since: todayIso() }], { okMsg: `Empezaste la semana ${week}: ${routeWeek(week).title}.`, rerender: false }).then(() => go('#/hoy'));
+    S.ui.justAdvanced = jump === 1 ? week : null;
+    const msg = intense ? `Empezaste la fase ${phaseOf(week).n}: ${phaseOf(week).title}.` : `Empezaste la semana ${week}: ${routeWeek(week).title}.`;
+    planOps([{ type: 'setCoachWeek', week, since: todayIso() }], { okMsg: msg, rerender: false }).then(() => go('#/hoy'));
   });
 }
 
@@ -707,11 +737,13 @@ function viewReview() {
   const ms = measurementsState();
   if (ms.block) return { title: 'Revisión semanal', html: ms.block, bind: bindMealActions };
   const r = weeklyReview({ profile: S.profile.data, plan: S.plan.data, measurements: S.measurements });
-  const next = r.week < ROUTE.length ? routeWeek(r.week + 1) : null;
+  const nextPh = r.phase && r.phase.n < PHASES.length ? PHASES[r.phase.n] : null;
+  const next = r.phase ? (nextPh ? { n: phaseEnd(nextPh), label: `Ir a la fase ${nextPh.n}` } : null) : (r.week < ROUTE.length ? { n: r.week + 1, label: `Ir a semana ${r.week + 1}` } : null);
   const bar = (pct) => `<div class="progress-track" style="margin-top:6px"><div class="progress-fill" style="width:${pct}%"></div></div>`;
   const html = `
     <a class="back" href="#/ruta">${icon('chevron-left')}Ruta</a>
-    <div class="page-head"><h1>Revisión semanal</h1><p class="muted">Últimos 7 días comparados con los 7 anteriores. Semana ${r.week}: ${esc(routeWeek(r.week).title)}.</p></div>
+    <div class="page-head"><h1>${r.phase ? 'Revisión de la fase' : 'Revisión semanal'}</h1><p class="muted">Últimos 7 días comparados con los 7 anteriores. ${r.phase ? `Fase ${r.phase.n}: ${esc(r.phase.title)}.` : `Semana ${r.week}: ${esc(routeWeek(r.week).title)}.`}</p></div>
+    ${r.phase ? `<div class="card flat" style="margin-bottom:16px"><p class="small"><strong>Meta de la fase.</strong> ${esc(r.phase.target)}</p></div>` : ''}
     ${r.wins.length ? `<div class="banner ok">${icon('trophy')}<div><p><strong>Lo que salió bien</strong></p><ul>${r.wins.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div></div>` : `<div class="banner info">${icon('info')}<p>Todavía no hay suficientes registros para comparar. Lo importante es seguir anotando: la próxima revisión será más útil.</p></div>`}
     ${r.habits.length ? `<section class="section"><h2>Hábitos</h2><div class="card stack">${r.habits.map((h) => `<div><div class="row spread"><span>${esc(h.label)}</span><strong>${r.cur.byHabit[h.id].done}/7</strong></div>${bar(r.cur.byHabit[h.id].pct)}</div>`).join('')}
       <p class="small muted">Días con registro de hábitos: ${r.cur.daysLogged} de 7.</p></div></section>` : ''}
@@ -724,7 +756,7 @@ function viewReview() {
     ${r.hardest ? `<section class="section"><div class="banner warn">${icon('target')}<div><p><strong>Lo que más costó: ${esc(r.hardest.label.toLowerCase())}</strong></p><p>Antes de sumar algo nuevo, podés quedarte otra semana en esta etapa. Elegí un momento fijo del día para este hábito.</p></div></div></section>` : ''}
     <div class="end-actions no-print">
       <a class="btn secondary" href="#/hoy">Seguir aquí</a>
-      ${next ? `<button class="btn" type="button" data-go-week="${next.n}">Ir a semana ${next.n}</button>` : '<a class="btn" href="#/resumen">Resumen para tu médico</a>'}
+      ${next ? `<button class="btn" type="button" data-go-week="${next.n}">${next.label}</button>` : '<a class="btn" href="#/resumen">Resumen para tu médico</a>'}
     </div>`;
   return { title: 'Revisión semanal', html, bind: bindRouteJump };
 }
@@ -1115,7 +1147,7 @@ function viewProgress() {
         : emptyState('moon', 'Sin registros de sueño', 'Anotá cuántas horas dormiste anoche. Dormir bien también influye en el apetito y la presión.', '#/registrar/sleep', 'Registrar sueño')}`;
     } else {
       const hb = byType('habit');
-      const HAB = activeHabits(S.plan.data.coach?.week || 1).length ? activeHabits(S.plan.data.coach?.week || 1) : HABITS.filter((h) => !h.legacy);
+      const HAB = activeHabits(curWeek(), curPace()).length ? activeHabits(curWeek(), curPace()) : HABITS.filter((h) => !h.legacy);
       body = `<div class="section-head"><h2>Hábitos</h2><a class="btn sm" href="#/registrar/habit">${icon('plus', 'sm')}Registrar hoy</a></div>
         ${hb.length ? `<div class="card"><p>${HAB.map((h) => { const n = habitAdherence(S.measurements, [h], new Date(), 7).byHabit[h.id].done; return `<span class="row spread" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(h.label)}</span><strong>${n}/7</strong></span>`; }).join('')}</p><p class="tiny muted" style="margin-top:8px">Últimos 7 días (hoy incluido).</p></div>${historyList(hb, (x) => `${HAB.filter((h) => x.data.items[h.id]).length} de ${HAB.length} hábitos`)}`
         : emptyState('list', 'Sin hábitos registrados', 'Unas pocas preguntas al final del día. No se trata de ser perfecto: sirve para ver qué te ayuda.', '#/registrar/habit', 'Registrar hábitos')}`;
@@ -1534,6 +1566,8 @@ function viewProfile() {
       <hr class="divider">
       <h2>Objetivos</h2>
       <div class="chips" style="margin-top:12px">${GOALS.map((g) => `<label class="chip"><input type="checkbox" name="goals" value="${g.id}" ${(p.goals || []).includes(g.id) ? 'checked' : ''}>${esc(g.short)}</label>`).join('')}</div>
+      <h2 style="margin-top:18px">Ritmo</h2>
+      <div class="checks" style="margin-top:12px">${Object.entries(PACES).map(([k, v]) => `<label class="check"><input type="radio" name="pace" value="${k}" ${paceOf(p) === k ? 'checked' : ''}><span><strong>${esc(v.label)}</strong><br><span class="small muted">${esc(v.detail)}</span></span></label>`).join('')}</div>
       <hr class="divider">
       <h2>Alergias y preferencias</h2>
       <div class="chips" style="margin-top:12px">${ALLERGENS.map((a) => `<label class="chip"><input type="checkbox" name="allergies" value="${a.id}" ${p.allergies.includes(a.id) ? 'checked' : ''}>${esc(a.label)}</label>`).join('')}</div>
@@ -1580,6 +1614,7 @@ function bindProfile() {
       name: v('name'), age: v('age'), height: v('height'), initialWeight: v('initialWeight'), milestonePct: v('milestonePct'),
       activity: v('activity'), conditions: v('conditions'), medications: v('medications'), otherAllergies: v('otherAllergies'),
       goals: $$('input[name=goals]:checked', f).map((x) => x.value),
+      pace: f.querySelector('input[name=pace]:checked')?.value || 'intensivo',
       allergies: $$('input[name=allergies]:checked', f).map((x) => x.value), preferences: $$('input[name=preferences]:checked', f).map((x) => x.value),
       mealTimes: Object.fromEntries(MEALS.map((m) => [m.id, v(`time_${m.id}`)])), emergencyNumber: v('emergencyNumber'), onboarded: true,
     };
@@ -1587,6 +1622,8 @@ function bindProfile() {
     if (!val.ok) { profileDraft = { data: { ...S.profile.data, ...data }, errors: val.errors }; render(); $('#p-error').innerHTML = `<p class="error-msg" role="alert">${icon('triangle-alert', 'sm')}${esc(Object.values(val.errors)[0])}</p>`; return; }
     const st = $('#p-state'); st.className = 'save-state saving'; st.textContent = 'Guardando…';
     const prevAllergies = S.profile.data.allergies;
+    const prevPace = paceOf(S.profile.data);
+    const prevEffective = curWeek();
     const r = await api('PUT', '/api/profile', { data: val.value, version: S.profile.version });
     if (!r.ok) {
       if (r.status === 409) {
@@ -1602,6 +1639,11 @@ function bindProfile() {
     profileDraft = null;
     S.profile = r.data.profile;
     notifyOthers('profile');
+    // Al pasar de intensivo a gradual se conservan los hábitos ya activos.
+    if (prevPace === 'intensivo' && val.value.pace === 'gradual' && (S.plan.data.coach?.week || 1) < prevEffective) {
+      planOps([{ type: 'setCoachWeek', week: prevEffective, since: S.plan.data.coach?.since || todayIso() }], { rerender: false });
+      S.plan.data.coach = { ...(S.plan.data.coach || {}), week: prevEffective };
+    }
     const newAllergy = val.value.allergies.some((a) => !prevAllergies.includes(a));
     render();
     const st3 = $('#p-state'); st3.className = 'save-state saved'; st3.textContent = 'Guardado';

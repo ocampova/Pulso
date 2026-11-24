@@ -446,3 +446,8 @@ h2.h3 { font-size: 1.1rem; letter-spacing: -0.01em; display: flex; align-items: 
 .trail.animate .stop.now { animation: stop-arrive .5s .8s var(--ease) both; }
 @keyframes stop-arrive { from { transform: scale(.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .trail.animate .trail-line .done, .trail.animate .stop.now { animation: none; } }
+/* Ritmo intensivo: varias paradas activas a la vez y meta de la fase */
+.trail .stop.active { background: var(--t-now-bg); color: var(--t-now-ink); border: 3px solid var(--t-done); }
+.trail .stop.active .stop-n { color: var(--t-done); }
+.focus-target { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px !important; padding: 10px 12px; border-radius: 8px; background: rgba(255, 255, 255, .08); color: #E5EFE8 !important; font-size: .94rem; }
+.focus-target .i { color: #8FC0A2; margin-top: 2px; }

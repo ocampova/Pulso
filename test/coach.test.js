@@ -6,7 +6,7 @@ import { HABITS, validateMeasurement, validatePlan, applyPlanOp, newPlan, isoLoc
 const now = new Date(2026, 10, 24, 20, 0); // martes 24 nov 2026, 20:00
 const at = (daysAgo, h = 7, min = 0) => { const d = new Date(now); d.setDate(d.getDate() - daysAgo); d.setHours(h, min, 0, 0); return isoLocal(d); };
 const m = (type, measured_at, data) => ({ id: Math.random().toString(16).slice(2), type, measured_at, data, version: 1 });
-const profile = { name: 'A', initialWeight: 109, milestonePct: 5, goals: ['peso', 'insulina', 'presion'] };
+const profile = { name: 'A', initialWeight: 109, milestonePct: 5, goals: ['peso', 'insulina', 'presion'], pace: 'gradual' };
 const plan = (week = 1, since = '2026-11-17') => ({ ...newPlan([], now), coach: { week, since } });
 
 test('la ruta tiene 12 etapas, con por qué, cómo y fuente', () => {
@@ -126,4 +126,28 @@ test('promedio de 7 días: la misma ventana en coach (Hoy, Revisión) y en stats
   assert.equal(s.count, a.n);
   assert.equal(Math.round(s.avg), a.sys);
   assert.equal(s.from, a.from);
+});
+
+test('ritmo intensivo: fase 1 activa 6 hábitos desde el día 1', async () => {
+  const { PHASES, phaseOf, effectiveWeek, paceOf } = await import('../public/js/coach.js');
+  assert.equal(paceOf({}), 'intensivo', 'intensivo es el predeterminado');
+  assert.equal(PHASES.length, 3);
+  assert.equal(phaseOf(1).n, 1); assert.equal(phaseOf(5).n, 1); assert.equal(phaseOf(6).n, 2); assert.equal(phaseOf(12).n, 3);
+  assert.equal(effectiveWeek(1, 'intensivo'), 5);
+  assert.deepEqual(activeHabits(1, 'intensivo').map((h) => h.id).sort(), ['caminar_post', 'proteina_desayuno', 'sal', 'sin_azucaradas', 'verduras']);
+  assert.ok(activeHabits(8, 'intensivo').some((h) => h.id === 'fibra'));
+  assert.equal(activeHabits(12, 'intensivo').length, 8);
+});
+
+test('ritmo intensivo: avanzar tras 14 días, no antes; meta y seguridad con medicamentos', () => {
+  const p = { ...profile, pace: 'intensivo', medications: 'Losartán 50 mg' };
+  const a10 = coachAdvice({ profile: p, plan: plan(5, '2026-11-14'), measurements: [] }, now); // día 11
+  assert.equal(a10.phase.n, 1); assert.equal(a10.canAdvance, false); assert.equal(a10.stageDays, 14);
+  const a14 = coachAdvice({ profile: p, plan: plan(5, '2026-11-11'), measurements: [] }, now); // día 14
+  assert.equal(a14.canAdvance, true);
+  assert.ok(a14.insights.find((i) => i.id === 'meds-intensive'), 'aviso de medicamentos en fase 1');
+  const noMeds = coachAdvice({ profile: { ...p, medications: '' }, plan: plan(5, '2026-11-11'), measurements: [] }, now);
+  assert.ok(!noMeds.insights.find((i) => i.id === 'meds-intensive'));
+  const last = coachAdvice({ profile: p, plan: plan(12, '2026-10-01'), measurements: [] }, now);
+  assert.equal(last.canAdvance, false, 'no hay fase después de la 3');
 });

@@ -5,7 +5,13 @@
 ## El coach
 
 - **Objetivos:** al empezar elegís uno o más (peso, insulina, presión). Las recomendaciones se ajustan a esa elección.
-- **Ruta de 12 semanas, un cambio a la vez:**
+- **Ritmo intensivo (predeterminado):** 3 fases de 14 días.
+  - Arranque: el plato, sin bebidas azucaradas, caminar después de comer, menos sal y proteína en el desayuno, todo desde el día 1.
+  - Movimiento: 150 minutos por semana, fuerza 2 días y fibra.
+  - Consolidar: sueño, estrés, comer fuera y revisión.
+  
+  Cada fase tiene una meta medible y un control a los 14 días. Si hay medicamentos registrados, la app pide avisar al médico, porque la presión o la glucosa pueden bajar rápido. El ritmo gradual (una etapa por semana) se elige en Perfil.
+- **Las 12 etapas de la ruta:**
   1. Punto de partida (mediciones de base)
   2. El plato
   3. Lo que tomás

@@ -11,11 +11,11 @@ web
 - The product supports other accounts with their own profile and goals, but other users are **not a priority right now**. There is no professional, family or public audience to design for.
 
 ## Product Purpose
-A **metabolic coach** that guides one person to make progress on three goals: lose weight, improve insulin resistance, and lower blood pressure. It combines a 12-week route (one change at a time), a daily checklist, recommendations computed from the person's own records, Costa Rican food with a shopping list, and clinical tracking (BP, weight, waist, lab results, sleep, activity).
+A **metabolic coach** that guides one person to make progress on three goals: lose weight, improve insulin resistance, and lower blood pressure. It combines a route of 12 stages (intensive pace: 3 phases of 2 weeks; gradual pace: one change per week), a daily checklist, recommendations computed from the person's own records, Costa Rican food with a shopping list, and clinical tracking (BP, weight, waist, lab results, sleep, activity).
 Success: Allan keeps using it day after day, completes the route stages, and arrives at his medical appointments with reliable data (7-day averages, trends, labs).
 
 ## Positioning
-Not a calorie counter and not a generic plan. It is a step-by-step route grounded in official guidance (NIDDK, AHA, NHLBI), with everyday Costa Rican food (gallo pinto, casado, olla de carne). The coach only describes **real data** the person entered. It never diagnoses and never touches medication.
+Not a calorie counter and not a generic plan. It is a route with measurable checkpoints every 14 days, grounded in official guidance (NIDDK, AHA, NHLBI), with everyday Costa Rican food (gallo pinto, casado, olla de carne). The coach only describes **real data** the person entered. It never diagnoses and never touches medication.
 
 ## Operating Context
 - Phone at 360–430 px, used with one hand (often the cuff is on the other arm), at home in the morning and at night, at meals, and at the feria or supermarket.
@@ -51,7 +51,7 @@ Not a calorie counter and not a generic plan. It is a step-by-step route grounde
 - Every number shown comes from the user's records. The preview screenshots use sample data that is labeled as such.
 
 ## Product Principles
-1. **One change at a time.** Every screen answers "what do I do today?" before "how am I doing?".
+1. **Real progress, fast and safe.** The default pace is intensive (3 phases of 14 days with several changes from day 1, and a numbers checkpoint every 14 days). A gradual pace stays available. Every screen answers "what do I do today?" before "how am I doing?".
 2. **Real data or nothing.** No estimates presented as measurements, no trend without enough data, and the same number on every screen.
 3. **Safety before engagement.** Alarm moments are designed first and never celebrated.
 4. **Accompany without blaming.** Progress is shown as information for adjusting, not as a grade.

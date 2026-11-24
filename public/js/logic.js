@@ -434,6 +434,8 @@ export function validateProfile(p) {
     if (!isTime(times[m.id])) errors[`time_${m.id}`] = `Hora de ${m.label.toLowerCase()} no válida.`;
     else out.mealTimes[m.id] = times[m.id];
   }
+  if (p.pace != null && !['intensivo', 'gradual'].includes(p.pace)) errors.pace = 'Ritmo no válido.';
+  out.pace = p.pace === 'gradual' ? 'gradual' : 'intensivo';
   out.onboarded = !!p.onboarded;
   return { ok: Object.keys(errors).length === 0, value: out, errors };
 }
