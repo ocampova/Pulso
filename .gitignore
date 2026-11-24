@@ -1,2 +1,6 @@
 data/
 node_modules/
+.impeccable/live/
+.impeccable/review/
+.impeccable/questions/
+.impeccable/mocks/

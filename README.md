@@ -46,7 +46,6 @@ Las observaciones describen datos y sugieren conversar con el médico; nunca dia
 Requiere **Node.js 22.5 o superior** y no usa dependencias de npm: el servidor usa `node:http`, `node:sqlite` y `node:crypto`.
 
 ```bash
-cd pulso
 npm start                      # http://localhost:3000
 PORT=8080 npm start            # otro puerto
 PULSO_DB=/ruta/pulso.db npm start
@@ -129,7 +128,8 @@ Una comida se puede cambiar desde una hoja inferior, que solo ofrece recetas com
 ## Producción (Railway)
 
 - URL: https://pulso-web-production-be5a4738.up.railway.app
-- Proyecto `pulso` › servicio `pulso-web`. Despliega solo cuando cambia algo dentro de `pulso/` en la rama `claude/pensive-goldberg-sst7em` (directorio raíz `/pulso`, Node 22, builder Railpack).
+- Repositorio: https://github.com/ocampova/Pulso. Railway despliega cada push a `main` (Node 22, builder Railpack).
+- Proyecto `pulso` › servicio `pulso-web`.
 - Disco persistente `pulso-datos` (5 GB) montado en `/data`. La base de datos está en `/data/pulso.db`.
 - Variables: `PULSO_DB=/data/pulso.db`, `PULSO_SECURE_COOKIES=1`, `PULSO_TRUST_PROXY=1`, `NODE_ENV=production`.
 - Chequeo de salud: `/api/health`.
